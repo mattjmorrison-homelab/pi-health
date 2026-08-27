@@ -1,0 +1,11 @@
+[Unit]
+Description=Run pi-health every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=10s
+Unit=pi-health.service
+
+[Install]
+WantedBy=timers.target

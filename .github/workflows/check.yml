@@ -1,0 +1,97 @@
+name: Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+jobs:
+  check:
+    if: github.event.action != 'closed'
+    runs-on: k8s-amd64
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install golangci-lint
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sfL "https://github.com/golangci/golangci-lint/releases/download/v2.13.1/golangci-lint-2.13.1-linux-amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/bin" --strip-components=1 golangci-lint-2.13.1-linux-amd64/golangci-lint
+          chmod +x "$RUNNER_TEMP/bin/golangci-lint"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: go build ./...
+
+      - name: gofmt
+        run: |
+          UNFORMATTED="$(gofmt -l .)"
+          if [[ -n "$UNFORMATTED" ]]; then
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        run: golangci-lint run
+
+      - name: Test with coverage
+        run: |
+          go test -coverprofile=coverage.out ./internal/...
+          go tool cover -func=coverage.out
+
+      - name: Enforce 100% coverage
+        run: |
+          TOTAL="$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')"
+          echo "Total coverage: ${TOTAL}%"
+          awk -v total="$TOTAL" 'BEGIN { exit !(total >= 100.0) }' || { echo "Coverage is below 100%"; exit 1; }
+
+  apply:
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: k8s-amd64
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Fetch pi1 deploy key from OpenBao
+        env:
+          VAULT_ADDR: http://k8s-openbao.openbao.svc:8200
+        run: |
+          JWT="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+          LOGIN_PAYLOAD="$(jq -n --arg jwt "$JWT" --arg role pi-health-deploy '{jwt: $jwt, role: $role}')"
+          CLIENT_TOKEN="$(curl -sf -X POST "$VAULT_ADDR/v1/auth/kubernetes/login" -d "$LOGIN_PAYLOAD" | jq -r '.auth.client_token')"
+          curl -sf -H "X-Vault-Token: $CLIENT_TOKEN" "$VAULT_ADDR/v1/kv/data/homelab/pi-health/ssh-private-key" \
+            | jq -r '.data.data.value' > "$RUNNER_TEMP/pi-health-deploy-key"
+          chmod 600 "$RUNNER_TEMP/pi-health-deploy-key"
+          echo "SSH_KEY_FILE=$RUNNER_TEMP/pi-health-deploy-key" >> "$GITHUB_ENV"
+
+      - name: Deploy to pi1
+        env:
+          PI_SSH: ${{ vars.PI_SSH }}
+        run: ./deploy.sh
+
+      - name: Verify deployed build SHA
+        run: |
+          SHA="${{ github.sha }}"
+          for _ in $(seq 1 18); do
+            RESULT="$(curl -sf "http://prometheus.monitoring.svc:9090/api/v1/query" \
+              --data-urlencode "query=pi_health_build_info{sha=\"${SHA}\"}" \
+              | jq -r '.data.result | length')"
+            if [[ "$RESULT" -gt 0 ]]; then
+              echo "Confirmed pi1 is running build ${SHA}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "pi1 never reported build ${SHA} to Prometheus"
+          exit 1
