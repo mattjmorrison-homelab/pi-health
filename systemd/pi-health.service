@@ -1,0 +1,17 @@
+[Unit]
+Description=pi-health homelab watchdog (oneshot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi-health
+Group=pi-health
+EnvironmentFile=/etc/pi-health/config.env
+ExecStart=/usr/local/bin/pi-health
+StateDirectory=pi-health
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
