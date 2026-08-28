@@ -15,7 +15,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: mattjmorrison-homelab/actions-bash@4137f9a42d5a3109469be774ca28e966e965a0c1
+      - uses: mattjmorrison-homelab/actions-bash@6183880188049f6e03f086d403c9db38f8089c40 # main
 
       - name: Install golangci-lint
         run: |
