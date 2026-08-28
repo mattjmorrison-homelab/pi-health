@@ -15,6 +15,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - uses: mattjmorrison-homelab/actions-bash@6183880188049f6e03f086d403c9db38f8089c40 # main
+
       - name: Install golangci-lint
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
@@ -51,6 +53,12 @@ jobs:
           echo "Total coverage: ${TOTAL}%"
           awk -v total="$TOTAL" 'BEGIN { exit !(total >= 100.0) }' || { echo "Coverage is below 100%"; exit 1; }
 
+      - name: shellcheck deploy.sh
+        run: shellcheck deploy.sh
+
+      - name: bats
+        run: bats test/
+
   apply:
     if: github.event.action == 'closed' && github.event.pull_request.merged == true
     runs-on: k8s-amd64
@@ -67,17 +75,26 @@ jobs:
         env:
           VAULT_ADDR: http://k8s-openbao.openbao.svc:8200
         run: |
+          set -euo pipefail
           JWT="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
           LOGIN_PAYLOAD="$(jq -n --arg jwt "$JWT" --arg role pi-health-deploy '{jwt: $jwt, role: $role}')"
           CLIENT_TOKEN="$(curl -sf -X POST "$VAULT_ADDR/v1/auth/kubernetes/login" -d "$LOGIN_PAYLOAD" | jq -r '.auth.client_token')"
+          if [[ -z "$CLIENT_TOKEN" || "$CLIENT_TOKEN" == "null" ]]; then
+            echo "Vault login for role pi-health-deploy failed to return a client token" >&2
+            exit 1
+          fi
           curl -sf -H "X-Vault-Token: $CLIENT_TOKEN" "$VAULT_ADDR/v1/kv/data/homelab/pi-health/ssh-private-key" \
             | jq -r '.data.data.value' > "$RUNNER_TEMP/pi-health-deploy-key"
+          if [[ ! -s "$RUNNER_TEMP/pi-health-deploy-key" ]] || grep -qx "null" "$RUNNER_TEMP/pi-health-deploy-key"; then
+            echo "Failed to fetch ssh-private-key from OpenBao" >&2
+            exit 1
+          fi
           chmod 600 "$RUNNER_TEMP/pi-health-deploy-key"
           echo "SSH_KEY_FILE=$RUNNER_TEMP/pi-health-deploy-key" >> "$GITHUB_ENV"
 
       - name: Deploy to pi1
         env:
-          PI_SSH: ${{ vars.PI_SSH }}
+          PI_SSH: pi@pi1.local
         run: ./deploy.sh
 
       - name: Verify deployed build SHA

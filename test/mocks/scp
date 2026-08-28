@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+echo "scp $*" >> "${CAPTURE_DIR:?}/scp.calls"

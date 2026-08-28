@@ -72,15 +72,6 @@ the binary to `pi1` over SSH, and installs/enables the systemd units. The
 to confirm the new build is actually running before the job is considered
 successful.
 
-The deploy target itself isn't in this repo — the `apply` job reads it from
-the `PI_SSH` repository variable (Settings → Secrets and variables →
-Actions → Variables), so the actual host/IP can change without a code
-change:
-
-```
-gh variable set PI_SSH --body "pi@pi1.local" -R mattjmorrison-homelab/pi-health
-```
-
 The same script can be run by hand for a first install or a manual
 redeploy:
 
