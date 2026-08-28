@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+case "$*" in
+  "rev-parse HEAD") echo "deadbeefcafef00d1234567890abcdef12345678" ;;
+  *)
+    echo "unexpected git call: $*" >&2
+    exit 1
+    ;;
+esac

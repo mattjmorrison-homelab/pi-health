@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+echo "go $*" >> "${CAPTURE_DIR:?}/go.calls"
+env | grep -E '^(GOOS|GOARCH|GOARM|CGO_ENABLED)=' >> "${CAPTURE_DIR:?}/go.env" || true
+
+# Create the requested output binary so downstream steps (scp) have a real
+# file to operate on, mirroring what a real `go build -o <path>` leaves
+# behind.
+prev=""
+for arg in "$@"; do
+  if [[ "$prev" == "-o" ]]; then
+    : > "$arg"
+  fi
+  prev="$arg"
+done

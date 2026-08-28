@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+echo "ssh $*" >> "${CAPTURE_DIR:?}/ssh.calls"
+cat > "${CAPTURE_DIR:?}/ssh.stdin" 2>/dev/null || true
