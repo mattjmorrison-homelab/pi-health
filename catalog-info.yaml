@@ -1,0 +1,11 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: pi-health
+  annotations:
+    github.com/project-slug: mattjmorrison-homelab/pi-health
+spec:
+  type: service
+  owner: mattjmorrison-homelab
+  lifecycle: experimental
+  system: monitoring
