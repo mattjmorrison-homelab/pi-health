@@ -91,6 +91,32 @@ jobs:
           fi
           chmod 600 "$RUNNER_TEMP/pi-health-deploy-key"
           echo "SSH_KEY_FILE=$RUNNER_TEMP/pi-health-deploy-key" >> "$GITHUB_ENV"
+          echo "::add-mask::$CLIENT_TOKEN"
+          echo "CLIENT_TOKEN=$CLIENT_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Fetch Discord webhook URLs from OpenBao
+        env:
+          VAULT_ADDR: http://k8s-openbao.openbao.svc:8200
+        run: |
+          set -euo pipefail
+          UPTIME_WEBHOOK_URL="$(curl -sf -H "X-Vault-Token: $CLIENT_TOKEN" \
+            "$VAULT_ADDR/v1/kv/data/homelab/service/admin-discord/pi-health/uptime-webhook-url" \
+            | jq -r '.data.data.value')"
+          DOWNTIME_WEBHOOK_URL="$(curl -sf -H "X-Vault-Token: $CLIENT_TOKEN" \
+            "$VAULT_ADDR/v1/kv/data/homelab/service/admin-discord/pi-health/downtime-webhook-url" \
+            | jq -r '.data.data.value')"
+          if [[ -z "$UPTIME_WEBHOOK_URL" || "$UPTIME_WEBHOOK_URL" == "null" ]]; then
+            echo "Failed to fetch uptime-webhook-url from OpenBao" >&2
+            exit 1
+          fi
+          if [[ -z "$DOWNTIME_WEBHOOK_URL" || "$DOWNTIME_WEBHOOK_URL" == "null" ]]; then
+            echo "Failed to fetch downtime-webhook-url from OpenBao" >&2
+            exit 1
+          fi
+          echo "::add-mask::$UPTIME_WEBHOOK_URL"
+          echo "::add-mask::$DOWNTIME_WEBHOOK_URL"
+          echo "UPTIME_WEBHOOK_URL=$UPTIME_WEBHOOK_URL" >> "$GITHUB_ENV"
+          echo "DOWNTIME_WEBHOOK_URL=$DOWNTIME_WEBHOOK_URL" >> "$GITHUB_ENV"
 
       - name: Deploy to pi1
         env:
