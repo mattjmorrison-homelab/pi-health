@@ -80,9 +80,12 @@ redeploy:
 ```
 
 It prompts for the SSH target when `PI_SSH` isn't already set (CI always
-sets it, so CI runs are always non-interactive). On first install it seeds
-`/etc/pi-health/config.env` with placeholder values on `pi1` — real webhook
-URLs are then filled in by hand.
+sets it, so CI runs are always non-interactive). Every deploy (re)writes
+`/etc/pi-health/config.env` on `pi1` from `PROBE_URL`, `UPTIME_WEBHOOK_URL`,
+`DOWNTIME_WEBHOOK_URL`, `FAILURE_THRESHOLD`, and `HTTP_TIMEOUT_SECONDS` in
+the deploying environment — CI fetches the real webhook URLs from OpenBao
+before running `deploy.sh`; a manual local run without them set still works,
+just without real webhook URLs.
 
 ## Development
 

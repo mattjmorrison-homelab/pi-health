@@ -6,6 +6,11 @@
 set -euo pipefail
 
 INTERVAL="${INTERVAL:-2min}"
+PROBE_URL="${PROBE_URL:-https://prometheus.morrisons.site/-/healthy}"
+UPTIME_WEBHOOK_URL="${UPTIME_WEBHOOK_URL:-}"
+DOWNTIME_WEBHOOK_URL="${DOWNTIME_WEBHOOK_URL:-}"
+FAILURE_THRESHOLD="${FAILURE_THRESHOLD:-2}"
+HTTP_TIMEOUT_SECONDS="${HTTP_TIMEOUT_SECONDS:-5}"
 
 # Non-interactive when PI_SSH is already set (CI always sets it) -- same
 # script serves both the automated apply job and a manual local run.
@@ -52,7 +57,14 @@ echo "Copying binary to $PI_SSH..."
 scp "${SSH_OPTS[@]}" "$WORKDIR/pi-health" "$PI_SSH:/tmp/pi-health"
 
 echo "Installing on $PI_SSH..."
-ssh -t "${SSH_OPTS[@]}" "$PI_SSH" "sudo INTERVAL='${INTERVAL}' bash -s" <<'EOF'
+ssh -t "${SSH_OPTS[@]}" "$PI_SSH" "sudo \
+  INTERVAL='${INTERVAL}' \
+  PROBE_URL='${PROBE_URL}' \
+  UPTIME_WEBHOOK_URL='${UPTIME_WEBHOOK_URL}' \
+  DOWNTIME_WEBHOOK_URL='${DOWNTIME_WEBHOOK_URL}' \
+  FAILURE_THRESHOLD='${FAILURE_THRESHOLD}' \
+  HTTP_TIMEOUT_SECONDS='${HTTP_TIMEOUT_SECONDS}' \
+  bash -s" <<'EOF'
 set -euo pipefail
 
 if ! id pi-health >/dev/null 2>&1; then
@@ -68,20 +80,16 @@ install -o root -g root -m 755 /tmp/pi-health /usr/local/bin/pi-health
 rm -f /tmp/pi-health
 
 mkdir -p /etc/pi-health
-if [[ ! -f /etc/pi-health/config.env ]]; then
-  echo "No existing config -- creating /etc/pi-health/config.env with placeholders."
-  cat >/etc/pi-health/config.env <<'ENVEOF'
-PROBE_URL=https://prometheus.morrisons.site/-/healthy
-UPTIME_WEBHOOK_URL=https://discord.com/api/webhooks/REPLACE/ME
-DOWNTIME_WEBHOOK_URL=https://discord.com/api/webhooks/REPLACE/ME
-FAILURE_THRESHOLD=2
-HTTP_TIMEOUT_SECONDS=5
+echo "Regenerating /etc/pi-health/config.env from the values passed to this deploy."
+cat >/etc/pi-health/config.env <<ENVEOF
+PROBE_URL=${PROBE_URL}
+UPTIME_WEBHOOK_URL=${UPTIME_WEBHOOK_URL}
+DOWNTIME_WEBHOOK_URL=${DOWNTIME_WEBHOOK_URL}
+FAILURE_THRESHOLD=${FAILURE_THRESHOLD}
+HTTP_TIMEOUT_SECONDS=${HTTP_TIMEOUT_SECONDS}
 ENVEOF
-  chown root:root /etc/pi-health/config.env
-  chmod 600 /etc/pi-health/config.env
-else
-  echo "Existing /etc/pi-health/config.env found -- leaving it untouched."
-fi
+chown root:root /etc/pi-health/config.env
+chmod 600 /etc/pi-health/config.env
 
 cat >/etc/systemd/system/pi-health.service <<'UNIT'
 [Unit]
@@ -124,8 +132,9 @@ systemctl status pi-health.timer --no-pager || true
 EOF
 
 echo ""
-echo "Done. If this was a first install, edit real secrets, then trigger one run:"
-echo "  ssh $PI_SSH sudo \$EDITOR /etc/pi-health/config.env"
+echo "Done. /etc/pi-health/config.env was (re)written from the env vars this run"
+echo "was given -- set UPTIME_WEBHOOK_URL/DOWNTIME_WEBHOOK_URL before running"
+echo "manually if you want real alerts sent. Trigger one run with:"
 echo "  ssh $PI_SSH sudo systemctl start pi-health.service"
 echo ""
 echo "Watch logs with: ssh $PI_SSH sudo journalctl -u pi-health.service -f"
