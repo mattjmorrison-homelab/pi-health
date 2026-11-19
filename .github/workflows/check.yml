@@ -77,53 +77,33 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Fetch pi1 deploy key from OpenBao
-        env:
-          VAULT_ADDR: http://k8s-openbao.openbao.svc:8200
+      - uses: mattjmorrison-homelab/actions-openbao@d67ac7726c64a846bd75a3513fbd1dce3f7b915b # add-oidc-auth-method
+        with:
+          role: pi-health-deploy-oidc
+          auth-method: oidc
+          kv-path: homelab/pi-health/ssh-private-key
+          output-name: SSH_KEY_VALUE
+
+      - name: Write pi1 deploy key to file
         run: |
           set -euo pipefail
-          GH_OIDC_TOKEN="$(curl -sf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=openbao" | jq -r '.value')"
-          LOGIN_PAYLOAD="$(jq -n --arg jwt "$GH_OIDC_TOKEN" --arg role pi-health-deploy-oidc '{jwt: $jwt, role: $role}')"
-          CLIENT_TOKEN="$(curl -sf -X POST "$VAULT_ADDR/v1/auth/jwt/login" -d "$LOGIN_PAYLOAD" | jq -r '.auth.client_token')"
-          if [[ -z "$CLIENT_TOKEN" || "$CLIENT_TOKEN" == "null" ]]; then
-            echo "Vault login for role pi-health-deploy-oidc failed to return a client token" >&2
-            exit 1
-          fi
-          curl -sf -H "X-Vault-Token: $CLIENT_TOKEN" "$VAULT_ADDR/v1/kv/data/homelab/pi-health/ssh-private-key" \
-            | jq -r '.data.data.value' > "$RUNNER_TEMP/pi-health-deploy-key"
-          if [[ ! -s "$RUNNER_TEMP/pi-health-deploy-key" ]] || grep -qx "null" "$RUNNER_TEMP/pi-health-deploy-key"; then
-            echo "Failed to fetch ssh-private-key from OpenBao" >&2
-            exit 1
-          fi
+          printf '%s' "$SSH_KEY_VALUE" > "$RUNNER_TEMP/pi-health-deploy-key"
           chmod 600 "$RUNNER_TEMP/pi-health-deploy-key"
           echo "SSH_KEY_FILE=$RUNNER_TEMP/pi-health-deploy-key" >> "$GITHUB_ENV"
-          echo "::add-mask::$CLIENT_TOKEN"
-          echo "CLIENT_TOKEN=$CLIENT_TOKEN" >> "$GITHUB_ENV"
 
-      - name: Fetch Discord webhook URLs from OpenBao
-        env:
-          VAULT_ADDR: http://k8s-openbao.openbao.svc:8200
-        run: |
-          set -euo pipefail
-          UPTIME_WEBHOOK_URL="$(curl -sf -H "X-Vault-Token: $CLIENT_TOKEN" \
-            "$VAULT_ADDR/v1/kv/data/homelab/service/admin-discord/pi-health/uptime-webhook-url" \
-            | jq -r '.data.data.value')"
-          DOWNTIME_WEBHOOK_URL="$(curl -sf -H "X-Vault-Token: $CLIENT_TOKEN" \
-            "$VAULT_ADDR/v1/kv/data/homelab/service/admin-discord/pi-health/downtime-webhook-url" \
-            | jq -r '.data.data.value')"
-          if [[ -z "$UPTIME_WEBHOOK_URL" || "$UPTIME_WEBHOOK_URL" == "null" ]]; then
-            echo "Failed to fetch uptime-webhook-url from OpenBao" >&2
-            exit 1
-          fi
-          if [[ -z "$DOWNTIME_WEBHOOK_URL" || "$DOWNTIME_WEBHOOK_URL" == "null" ]]; then
-            echo "Failed to fetch downtime-webhook-url from OpenBao" >&2
-            exit 1
-          fi
-          echo "::add-mask::$UPTIME_WEBHOOK_URL"
-          echo "::add-mask::$DOWNTIME_WEBHOOK_URL"
-          echo "UPTIME_WEBHOOK_URL=$UPTIME_WEBHOOK_URL" >> "$GITHUB_ENV"
-          echo "DOWNTIME_WEBHOOK_URL=$DOWNTIME_WEBHOOK_URL" >> "$GITHUB_ENV"
+      - uses: mattjmorrison-homelab/actions-openbao@d67ac7726c64a846bd75a3513fbd1dce3f7b915b # add-oidc-auth-method
+        with:
+          role: pi-health-deploy-oidc
+          auth-method: oidc
+          kv-path: homelab/service/admin-discord/pi-health/uptime-webhook-url
+          output-name: UPTIME_WEBHOOK_URL
+
+      - uses: mattjmorrison-homelab/actions-openbao@d67ac7726c64a846bd75a3513fbd1dce3f7b915b # add-oidc-auth-method
+        with:
+          role: pi-health-deploy-oidc
+          auth-method: oidc
+          kv-path: homelab/service/admin-discord/pi-health/downtime-webhook-url
+          output-name: DOWNTIME_WEBHOOK_URL
 
       - name: Deploy to pi1
         env:
