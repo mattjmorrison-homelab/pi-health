@@ -77,19 +77,13 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: mattjmorrison-homelab/actions-openbao@d67ac7726c64a846bd75a3513fbd1dce3f7b915b # add-oidc-auth-method
+      - uses: mattjmorrison-homelab/actions-openbao/sign-ssh@40a4bb9224176763ee986bab661770cd06af6921 # add-sign-ssh-action
         with:
-          role: pi-health-deploy-oidc
-          auth-method: oidc
-          kv-path: homelab/pi-health/ssh-private-key
-          output-name: SSH_KEY_VALUE
+          role: pi-fleet
+          key-file: ${{ runner.temp }}/pi-health-deploy-key
 
-      - name: Write pi1 deploy key to file
-        run: |
-          set -euo pipefail
-          printf '%s' "$SSH_KEY_VALUE" > "$RUNNER_TEMP/pi-health-deploy-key"
-          chmod 600 "$RUNNER_TEMP/pi-health-deploy-key"
-          echo "SSH_KEY_FILE=$RUNNER_TEMP/pi-health-deploy-key" >> "$GITHUB_ENV"
+      - name: Set SSH_KEY_FILE
+        run: echo "SSH_KEY_FILE=${{ runner.temp }}/pi-health-deploy-key" >> "$GITHUB_ENV"
 
       - uses: mattjmorrison-homelab/actions-openbao@d67ac7726c64a846bd75a3513fbd1dce3f7b915b # add-oidc-auth-method
         with:
