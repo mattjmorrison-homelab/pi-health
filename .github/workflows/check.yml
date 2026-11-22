@@ -77,9 +77,10 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: mattjmorrison-homelab/actions-openbao/sign-ssh@40a4bb9224176763ee986bab661770cd06af6921 # add-sign-ssh-action
+      - uses: mattjmorrison-homelab/actions-openbao/sign-ssh@f295c588c3adf997669f9a880b4666c2f5359b9d # main
         with:
           role: pi-fleet
+          auth-role: pi-health-deploy-oidc
           key-file: ${{ runner.temp }}/pi-health-deploy-key
 
       - name: Set SSH_KEY_FILE
